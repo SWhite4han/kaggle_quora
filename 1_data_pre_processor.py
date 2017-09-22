@@ -6,12 +6,19 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
+import make_npy_files
+
 
 # test = True if run on PC ; False if run on Server
 test = False
+#
+make_npy = True
 # 0 if you do not want to make cv data npy
 k_fold = 0
-
+# True if want to make word embedding npy file
+fast_text = True
+glove = True
+w2v = True
 #
 # Set directories and parameters
 # ----------------------------------------------------------------------------
@@ -37,20 +44,22 @@ TRAIN2_NPY = data_npy_path + 'train2.npy'
 TRAIN_LABLE = data_npy_path + 'train_label.npy'
 TEST1_NPY = data_npy_path + 'test1.npy'
 TEST2_NPY = data_npy_path + 'test2.npy'
-TEST_LABLE = data_npy_path + 'test_label.npy'
-
+TEST_ID = data_npy_path + 'test_id.npy'
+tokenizer_path = data_npy_path + 'tokenizer/'
 
 #
 # Doing pre process if npy files not find
 # ----------------------------------------------------------------
-if not os.path.exists(TRAIN1_NPY):
-    import make_npy_files
-    make_npy_files.run(emb_raw_path=resource, emb_npy_path=emb_npy_path, fast_text=True, glove=True,
-                       train_raw=train, test_raw=test, data_path=data_npy_path)
+if make_npy:
+    make_npy_files.run_data_tokenizer(train_raw=train, test_raw=test, data_npy_path=data_npy_path)
 
+if fast_text or glove or w2v:
+    make_npy_files.run_emb(data_npy_path=data_npy_path, emb_raw_path=resource, emb_npy_path=emb_npy_path,
+                           fast_text=True, glove=True, w2v=True)
 
 if k_fold:
     kf = StratifiedKFold(n_splits=k_fold, shuffle=True)
+
     #
     # Load training data and testing data
     # ----------------------------------------------------------------
@@ -62,7 +71,7 @@ if k_fold:
 
     test_data_1 = np.load(TEST1_NPY)
     test_data_2 = np.load(TEST2_NPY)
-    test_ids = np.load(TEST_LABLE)
+    test_ids = np.load(TEST_ID)
     print('Shape of test data tensor:', test_data_1.shape)
 
     features = pd.read_csv(path_feats_train)
@@ -72,6 +81,10 @@ if k_fold:
     test_feats = pd.read_csv(path_feats_test)
     test_feats = ((test_feats - test_feats.min()) / (test_feats.max() - test_feats.min())).values
     print('Shape of test features tensor:', test_feats.shape)
+
+    #
+    # Split data in k-fold and save them to npy file
+    # ----------------------------------------------------------------
     for tid, vid in kf.split(data_1, labels):
         data_1_train, data_2_train, labels_train = data_1[tid], data_2[tid], labels[tid]
         data_1_val, data_2_val, labels_val = data_1[vid], data_2[vid], labels[vid]
