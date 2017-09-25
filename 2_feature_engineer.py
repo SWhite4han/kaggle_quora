@@ -305,14 +305,13 @@ def clean_doc(s):
     return stemmed_tokens
 
 
-def train_lda(texts, num_topics=20):
-    dictionary = gensim.corpora.Dictionary(texts)
+def train_lda(dictionary, texts, num_topics=20):
     # convert tokenized documents into a document-term matrix
     corpus = [dictionary.doc2bow(text) for text in texts]
     del texts
     lda = gensim.models.ldamodel.LdaModel(corpus, num_topics=num_topics, id2word=dictionary, passes=20)
     lsi = gensim.models.lsimodel.LsiModel(corpus, num_topics=num_topics, id2word=dictionary)
-    return dictionary, lda, lsi
+    return lda, lsi
 
 
 def char_ngrams(n, word):
@@ -515,7 +514,7 @@ if __name__ == '__main__':
     # test = True
     test = False
 
-    common_feats = True
+    common_feats = False
     topic_model = True
 
     log = set_logger()
@@ -534,7 +533,7 @@ if __name__ == '__main__':
         data_path_test = '/home/csist/Dataset/QuoraQP/test_clean.csv'
         w2v_path = '/home/csist/workspace/resources/GoogleNews-vectors-negative300.bin'
         out_path = 'added_features/'
-        num_topics = 100
+        num_topics = 50
     log.info('stop words: {0}'.format(stop_words))
 
     if not os.path.isdir(out_path):
@@ -592,30 +591,38 @@ if __name__ == '__main__':
     if topic_model:
         meta = {
             'train': {'df': df,
-                      'out': out_path + 'train_topic_feats.csv'},
+                      'out': out_path + '%d_train_topic_feats.csv' % num_topics},
             'test': {'df': dft,
-                     'out': out_path + 'test_topic_feats.csv'}
+                     'out': out_path + '%d_test_topic_feats.csv' % num_topics}
         }
         model_out_path = out_path + 'models/'
         if not os.path.isdir(model_out_path):
             os.makedirs(model_out_path)
 
-        if not os.path.isfile(model_out_path + 'quora_lda.model'):
+        if not os.path.isfile(model_out_path + '%d_quora_lda.model' % num_topics):
             # Build LDA model
             log.info('Building LDA and LSI model')
             log.warning('**************** dictionary should be build by all data... ********************')
             st = time.time()
             texts = [i for i in pd.Series(df['question1'].tolist() + df['question2'].tolist()).apply(clean_doc)]
-            dictionary, lda_model, lsi_model = train_lda(texts, num_topics=num_topics)
+            # If cant find dictionary.pickle re-train a dictionary
+            if not os.path.isfile(model_out_path + 'dictionary.pickle'):
+                dictionary = gensim.corpora.Dictionary(texts)
+                # Saving dictionary to pickle file
+                with open(model_out_path + 'dictionary.pickle', 'wb') as handle:
+                    pickle.dump(dictionary, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            else:
+                with open(model_out_path + 'dictionary.pickle', 'rb') as handle:
+                    dictionary = pickle.load(handle)
+
+            lda_model, lsi_model = train_lda(dictionary, texts, num_topics=num_topics)
             lda_time = time.time()-st
             del texts
             process_time.append('...time for train lda and lsi: %.2f m' % (lda_time / 60))
 
-            # Saving dictionary, lda_model, lsi_model to pickle and model file
-            with open(model_out_path + 'dictionary.pickle', 'wb') as handle:
-                pickle.dump(dictionary, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            lda_model.save(model_out_path + 'quora_lda.model')
-            lda_model.save(model_out_path + 'quora_lsi.model')
+            # Saving lda_model, lsi_model to model file
+            lda_model.save(model_out_path + '%d_quora_lda.model' % num_topics)
+            lda_model.save(model_out_path + '%d_quora_lsi.model' % num_topics)
 
         with open(model_out_path + 'dictionary.pickle', 'rb') as handle:
             dictionary = pickle.load(handle)
