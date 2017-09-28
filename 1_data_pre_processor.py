@@ -13,8 +13,7 @@ import make_npy_files
 test = False
 #
 make_npy = True
-# 0 if you do not want to make cv data npy
-k_fold = 0
+
 # True if want to make word embedding npy file
 fast_text = True
 glove = True
@@ -56,36 +55,3 @@ if make_npy:
 if fast_text or glove or w2v:
     make_npy_files.run_emb(data_npy_path=data_npy_path, emb_raw_path=resource, emb_npy_path=emb_npy_path,
                            fast_text=True, glove=True, w2v=True)
-
-if k_fold:
-    kf = StratifiedKFold(n_splits=k_fold, shuffle=True)
-
-    #
-    # Load training data and testing data
-    # ----------------------------------------------------------------
-    data_1 = np.load(TRAIN1_NPY)
-    data_2 = np.load(TRAIN2_NPY)
-    labels = np.load(TRAIN_LABLE)
-    print('Shape of data tensor:', data_1.shape)
-    print('Shape of label tensor:', labels.shape)
-
-    test_data_1 = np.load(TEST1_NPY)
-    test_data_2 = np.load(TEST2_NPY)
-    test_ids = np.load(TEST_ID)
-    print('Shape of test data tensor:', test_data_1.shape)
-
-    features = pd.read_csv(path_feats_train)
-    features = ((features - features.min()) / (features.max() - features.min())).values
-    print('Shape of features tensor:', features.shape)
-
-    test_feats = pd.read_csv(path_feats_test)
-    test_feats = ((test_feats - test_feats.min()) / (test_feats.max() - test_feats.min())).values
-    print('Shape of test features tensor:', test_feats.shape)
-
-    #
-    # Split data in k-fold and save them to npy file
-    # ----------------------------------------------------------------
-    for tid, vid in kf.split(data_1, labels):
-        data_1_train, data_2_train, labels_train = data_1[tid], data_2[tid], labels[tid]
-        data_1_val, data_2_val, labels_val = data_1[vid], data_2[vid], labels[vid]
-        feats, feats_val = features[tid], features[vid]

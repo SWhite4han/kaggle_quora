@@ -459,12 +459,14 @@ def build_features(data, stops):
 def build_topic_feats(data):
     X = pd.DataFrame()
 
+    # Cosine similarity
     def _lda_sim(row):
         return gensim.matutils.cossim(_lda(row['question1']), _lda(row['question2']))
 
     def _lsi_sim(row):
         return gensim.matutils.cossim(_lsi(row['question1']), _lsi(row['question2']))
 
+    # Hellinger similarity
     def _lda_hellinger_sim(row):
         dense1 = gensim.matutils.sparse2full(_lda(row['question1']), num_topics)
         dense2 = gensim.matutils.sparse2full(_lda(row['question2']), num_topics)
@@ -475,9 +477,11 @@ def build_topic_feats(data):
         dense2 = gensim.matutils.sparse2full(_lsi(row['question2']), num_topics)
         return np.sqrt(0.5 * ((np.sqrt(dense1) - np.sqrt(dense2))**2).sum())
 
+    # Get a list about LDA topic probability like [(topic N, probability),...]. ex.[(10, 0.013), (12, 0.431)]
     def _lda(x):
         return lda_model[dictionary.doc2bow(clean_doc(str(x)))]
 
+    # Get a list about LSI topic probability like [(topic N, probability),...]. ex.[(10, 0.013), (12, 0.431)]
     def _lsi(x):
         return lsi_model[dictionary.doc2bow(clean_doc(str(x)))]
 
@@ -511,8 +515,8 @@ def build_topic_feats(data):
 
 
 if __name__ == '__main__':
-    # test = True
-    test = False
+    test = True
+    # test = False
 
     common_feats = False
     topic_model = True
@@ -539,13 +543,13 @@ if __name__ == '__main__':
     if not os.path.isdir(out_path):
         os.makedirs(out_path)
 
-    # read data frame and build split feature for instance '1 2 3' to ['1', '2', '3']
+    # Read data frame and build split feature for instance '1 2 3' to ['1', '2', '3']
     log.info('Reading data frame')
     st = time.time()
     df = prepare_df(data_path)
     rd_time = time.time()-st
 
-    # read test data
+    # Read test data
     log.info('Reading test data frame')
     st = time.time()
     dft = prepare_df(data_path_test)
@@ -554,6 +558,7 @@ if __name__ == '__main__':
     process_time.append('...time for read data frame: %.2f s' % rd_time)
     process_time.append('...time for read test data: %.2f s' % rdt_time)
 
+    # Build common features if common_feats = True
     if common_feats:
         meta = {
             'train': {'df': df,
@@ -588,6 +593,7 @@ if __name__ == '__main__':
             process_time.append('...time for build %s features: %.2f m' % (task_name, build_time / 60))
             process_time.append('...time for save %s csv: %.2f m' % (task_name, save_time / 60))
 
+    # Build topic model features if topic_model = True
     if topic_model:
         meta = {
             'train': {'df': df,
@@ -595,24 +601,29 @@ if __name__ == '__main__':
             'test': {'df': dft,
                      'out': out_path + '%d_test_topic_feats.csv' % num_topics}
         }
+
         model_out_path = out_path + 'models/'
+        lda_model_path = model_out_path + '%d_quora_lda.model' % num_topics
+        lsi_model_path = model_out_path + '%d_quora_lsi.model' % num_topics
+        dictionary_path = model_out_path + 'dictionary.pickle'
+
         if not os.path.isdir(model_out_path):
             os.makedirs(model_out_path)
 
-        if not os.path.isfile(model_out_path + '%d_quora_lda.model' % num_topics):
+        if not os.path.isfile(lda_model_path):
             # Build LDA model
             log.info('Building LDA and LSI model')
             log.warning('**************** dictionary should be build by all data... ********************')
             st = time.time()
             texts = [i for i in pd.Series(df['question1'].tolist() + df['question2'].tolist()).apply(clean_doc)]
             # If cant find dictionary.pickle re-train a dictionary
-            if not os.path.isfile(model_out_path + 'dictionary.pickle'):
+            if not os.path.isfile(dictionary_path):
                 dictionary = gensim.corpora.Dictionary(texts)
                 # Saving dictionary to pickle file
-                with open(model_out_path + 'dictionary.pickle', 'wb') as handle:
+                with open(dictionary_path, 'wb') as handle:
                     pickle.dump(dictionary, handle, protocol=pickle.HIGHEST_PROTOCOL)
             else:
-                with open(model_out_path + 'dictionary.pickle', 'rb') as handle:
+                with open(dictionary_path, 'rb') as handle:
                     dictionary = pickle.load(handle)
 
             lda_model, lsi_model = train_lda(dictionary, texts, num_topics=num_topics)
@@ -621,13 +632,13 @@ if __name__ == '__main__':
             process_time.append('...time for train lda and lsi: %.2f m' % (lda_time / 60))
 
             # Saving lda_model, lsi_model to model file
-            lda_model.save(model_out_path + '%d_quora_lda.model' % num_topics)
-            lda_model.save(model_out_path + '%d_quora_lsi.model' % num_topics)
+            lda_model.save(lda_model_path)
+            lda_model.save(lsi_model_path)
 
-        with open(model_out_path + 'dictionary.pickle', 'rb') as handle:
+        with open(dictionary_path, 'rb') as handle:
             dictionary = pickle.load(handle)
-        lda_model = gensim.models.ldamodel.LdaModel.load(model_out_path + 'quora_lda.model')
-        lsi_model = gensim.models.lsimodel.LsiModel.load(model_out_path + 'quora_lsi.model')
+        lda_model = gensim.models.ldamodel.LdaModel.load(lda_model_path)
+        lsi_model = gensim.models.lsimodel.LsiModel.load(lsi_model_path)
 
         for task_name, task in meta.items():
             data = task.get('df')
@@ -648,6 +659,7 @@ if __name__ == '__main__':
             process_time.append('...time for build %s LDA and LSI features: %.2f m' % (task_name, build_time / 60))
             process_time.append('...time for save %s LDA and LSI csv: %.2f m' % (task_name, save_time / 60))
 
+    # Print all process time
     for p_time_info in process_time:
         log.info(p_time_info)
 
