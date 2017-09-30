@@ -1,0 +1,44 @@
+# Creating Config.ini by using Config.template please.
+
+
+[step1]
+
+# -------------------------------------------------------------
+# For all
+# -------------------------------------------------------------
+
+# Path to raw training/testing data
+train_raw=/data1/quora_pair/50q_pair.csv
+test_raw=/data1/quora_pair/50q_pair_test.csv
+
+# Path to embedding model
+emb_path=/data1/resources/
+
+# True if want to make training/testing data npy file
+make_npy = True
+
+# True if want to make word embedding npy file
+fast_text = True
+glove = True
+w2v = True
+
+
+[step2]
+# -------------------------------------------------------------
+# For 1_data_pre_processor
+# -------------------------------------------------------------
+
+# Path to data.npy files
+npy_path=data/
+
+
+[step3]
+# -------------------------------------------------------------
+# For 2_feature_engineer
+# -------------------------------------------------------------
+
+# Path to save added features
+added_path=added_features/
+common_feats = False
+topic_model = True
+num_topics = 20

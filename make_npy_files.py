@@ -11,6 +11,7 @@ from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 
 import preprocessing
+from gensim.models import KeyedVectors
 
 
 def run_data_tokenizer(train_raw, test_raw, data_npy_path):
@@ -20,9 +21,6 @@ def run_data_tokenizer(train_raw, test_raw, data_npy_path):
 
     train_data_file = train_raw
     test_data_file = test_raw
-
-    if not os.path.isdir(data_npy_path):
-        os.makedirs(data_npy_path)
 
     train1_npy = data_npy_path + 'train1.npy'
     train2_npy = data_npy_path + 'train2.npy'
@@ -161,9 +159,6 @@ def run_emb(data_npy_path, emb_raw_path, emb_npy_path, fast_text=False, glove=Fa
     with open(tokenizer_path + 'tokenizer.pickle', 'rb') as handle:
         tokenizer = pickle.load(handle)
 
-    if not os.path.isdir(emb_npy_path):
-        os.makedirs(emb_npy_path)
-
     if fast_text:
         task_name = 'fast text'
         emb_file = emb_raw_path + 'wiki.en.vec'
@@ -177,6 +172,10 @@ def run_emb(data_npy_path, emb_raw_path, emb_npy_path, fast_text=False, glove=Fa
         _emb(tokenizer, task_name, emb_file, emb_npy_saveto, max_nb_words, embedding_dim)
 
     if w2v:
+        task_name = 'w2v'
+        emb_file = emb_raw_path + 'GoogleNews-vectors-negative300.bin'
+        emb_npy_saveto = emb_npy_path + 'w2v.npy'
+        _emb(tokenizer, task_name, emb_file, emb_npy_saveto, max_nb_words, embedding_dim)
         print('w2v to npy file does not work')
         pass
 
@@ -187,34 +186,37 @@ def _emb(tokenizer, task_name, embedding_file, emb_npy_saveto, max_nb_words=2000
     # ----------------------------------------------------------------------------
     print('Indexing word vectors')
 
-    # word2vec = KeyedVectors.load_word2vec_format(emb_file, binary=True)
-    # print('Found %s word vectors of word2vec' % len(word2vec.vocab))
-
-    embeddings_index = {}
-    ef = open(embedding_file)
-    count = 0
-    for line in ef:
-        if task_name == 'fast text' and count == 0:
-            count += 1
-            continue
-        values = line.strip().split(' ')
-        word = values[0]
-        coefs = np.asarray(values[1:], dtype='float32')
-        embeddings_index[word] = coefs
-    ef.close()
-
-    print('Found %d word vectors of %s.' % (len(embeddings_index), task_name))
-
     word_index = tokenizer.word_index
     print('Found %s unique tokens' % len(word_index))
-
     nb_words = min(max_nb_words, len(word_index)) + 1
-
     embedding_matrix = np.zeros((nb_words, embedding_dim))
-    for word, i in word_index.items():
-        embedding_vector = embeddings_index.get(word)
-        if embedding_vector is not None:
-            embedding_matrix[i] = embedding_vector
+
+    if task_name == 'w2v':
+        word2vec = KeyedVectors.load_word2vec_format(embedding_file, binary=True)
+        print('Found %s word vectors of word2vec' % len(word2vec.vocab))
+        for word, i in word_index.items():
+            if word in word2vec.vocab:
+                embedding_matrix[i] = word2vec.word_vec(word)
+    else:
+        embeddings_index = {}
+        ef = open(embedding_file)
+        count = 0
+        for line in ef:
+            if task_name == 'fast text' and count == 0:
+                count += 1
+                continue
+            values = line.strip().split(' ')
+            word = values[0]
+            coefs = np.asarray(values[1:], dtype='float32')
+            embeddings_index[word] = coefs
+        ef.close()
+    
+        print('Found %d word vectors of %s.' % (len(embeddings_index), task_name))
+
+        for word, i in word_index.items():
+            embedding_vector = embeddings_index.get(word)
+            if embedding_vector is not None:
+                embedding_matrix[i] = embedding_vector
     print('Null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0))
 
     np.save(emb_npy_saveto, embedding_matrix)

@@ -14,6 +14,7 @@ import sys
 import time
 import os
 import pickle
+import configparser
 
 # Set parameters
 stop_words = set(stopwords.words('english'))
@@ -314,8 +315,30 @@ def train_lda(dictionary, texts, num_topics=20):
     return lda, lsi
 
 
-def char_ngrams(n, word):
+def char_n_grams(word, n):
     return [word[i:i + n] for i in range(len(word)-n+1)]
+
+
+def _wordcount(sent):
+    wc = {}
+    for word in sent:
+        if word not in wc:
+            wc[word] = 1
+        else:
+            wc[word] += 1
+    wc_list = []
+    for k, v in wc.items():
+        wc_list.append([k, v])
+    return wc_list
+
+
+def n_grams_sim(row, n):
+    s1 = row['q1_%d_grams' % n]
+    s2 = row['q2_%d_grams' % n]
+    bag_s1 = _wordcount(s1)
+    bag_s2 = _wordcount(s2)
+    sim = gensim.matutils.cossim(bag_s1, bag_s2)
+    return sim
 
 
 def prepare_df(path):
@@ -453,6 +476,11 @@ def build_features(data, stops):
     X['kur_q1vec'] = [kurtosis(x) for x in np.nan_to_num(question1_vectors)]
     X['kur_q2vec'] = [kurtosis(x) for x in np.nan_to_num(question2_vectors)]  # 79
 
+    # Build n-grams similarity features from 1 to 8 grams.
+    for i in range(1, 9):
+        data['q1_%d_grams' % i] = data['question1'].apply(char_n_grams, args=(i,))
+        data['q2_%d_grams' % i] = data['question2'].apply(char_n_grams, args=(i,))
+        X['%d_grams_sim' % i] = data.apply(n_grams_sim, n=i, axis=1, raw=True)
     return X
 
 
@@ -515,29 +543,22 @@ def build_topic_feats(data):
 
 
 if __name__ == '__main__':
-    test = True
-    # test = False
+    config = configparser.ConfigParser()
+    config.read('Config.ini')
 
-    common_feats = False
-    topic_model = True
+    data_path = config.get('step1', 'train_raw')
+    data_path_test = config.get('step1', 'test_raw')
+    w2v_path = config.get('step1', 'emb_path') + 'GoogleNews-vectors-negative300.bin'
+    common_feats = config.getboolean('step3', 'common_feats')
+    topic_model = config.getboolean('step3', 'topic_model')
+    out_path = config.get('step3', 'added_path')
+    num_topics = config.getint('step3', 'num_topics')
 
     log = set_logger()
 
     process_time = []
     save_path = []
 
-    if test:
-        data_path = '/data1/quora_pair/50q_pair.csv'
-        data_path_test = '/data1/quora_pair/50q_pair_test.csv'
-        w2v_path = '/data1/resources/GoogleNews-vectors-negative300.bin'
-        out_path = 'added_features/'
-        num_topics = 20
-    else:
-        data_path = '/home/csist/Dataset/QuoraQP/train_clean.csv'
-        data_path_test = '/home/csist/Dataset/QuoraQP/test_clean.csv'
-        w2v_path = '/home/csist/workspace/resources/GoogleNews-vectors-negative300.bin'
-        out_path = 'added_features/'
-        num_topics = 50
     log.info('stop words: {0}'.format(stop_words))
 
     if not os.path.isdir(out_path):
@@ -639,6 +660,10 @@ if __name__ == '__main__':
             dictionary = pickle.load(handle)
         lda_model = gensim.models.ldamodel.LdaModel.load(lda_model_path)
         lsi_model = gensim.models.lsimodel.LsiModel.load(lsi_model_path)
+
+        # a = dictionary.doc2bow(clean_doc('What is Java programming  How To Learn Java Programming Language'))
+        # b = dictionary.doc2bow(clean_doc('What is Java programming  How To Learn Java Programming Language'))
+        # sim = gensim.matutils.cossim(a, b)
 
         for task_name, task in meta.items():
             data = task.get('df')
